@@ -1305,11 +1305,19 @@ local function initKeyAuth()
     return false
 end
 
-local function executeMasterScript()
+local function executeMasterScript(keyUsed, hwidUsed)
     playEmbedded("launch")
-    local mainScriptUrl = "https://raw.githubusercontent.com/YARDEDDx/beta-test-macro-/refs/heads/main/macro?nocache=" .. tostring(tick())
-    local fetchSuccess, result = pcall(function() return game:HttpGet(mainScriptUrl) end)
-    if not fetchSuccess or not result or result == "" then return end
+
+    local workerUrl = string.format(
+        "https://tight-voice-4d4b.wmarshall689.workers.dev/?key=%s&hwid=%s",
+        urlEncode(keyUsed or ""), urlEncode(hwidUsed or ""))
+
+    local fetchSuccess, result = pcall(function() return game:HttpGet(workerUrl) end)
+    if not fetchSuccess or not result or result == ""
+        or result:match("^Invalid key") or result:match("^Auth init failed")
+        or result:match("^Script") or result:match("^Missing") then
+        return
+    end
 
     -- Sets the global session token so the master script knows it came through the loader!
     _G.ExoticaAuthorizedSession = true
@@ -1788,7 +1796,7 @@ local function showLoginUI()
             tween(submitBtn, {BackgroundColor3 = Color3.fromRGB(48, 209, 88), BackgroundTransparency = 0.05}, 0.3)
             btnGrad.Enabled = false
             task.wait(1)
-            closeUI(executeMasterScript, true)
+            closeUI(function() executeMasterScript(enteredKey, getHWID()) end, true)
         else
             busy = false
             playEmbedded("error")
@@ -1822,7 +1830,7 @@ task.spawn(function()
         if readOk and savedKey and savedKey ~= "" then
             local isValid, msg = validateKey(savedKey, true)
             if isValid then
-                executeMasterScript()
+                executeMasterScript(savedKey, getHWID())
                 return
             end
         end
