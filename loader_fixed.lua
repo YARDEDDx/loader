@@ -1363,15 +1363,15 @@ local function executeMasterScript(keyUsed, hwidUsed)
     runScriptSource(result)
 end
 
--- Creator login. Bypasses KeyAuth entirely: the worker checks a secret creator key,
--- a password and a UserId allowlist together. Nothing secret is stored in this file,
--- and the password is sent in a POST body (not the URL) and never written to disk.
+-- Creator login. Bypasses KeyAuth entirely: the worker checks the secret creator key
+-- and the UserId allowlist together. Nothing secret is stored in this file,
+-- and the key is sent in a POST body (not the URL).
 -- Returns (true, scriptSource) or (false, message).
-local function fetchCreatorScript(creatorKey, password)
+local function fetchCreatorScript(creatorKey)
+    creatorKey = (tostring(creatorKey or ""):gsub("%s+", ""))
     local body = HttpService:JSONEncode({
         mode = "master",
         key = creatorKey,
-        pass = password,
         uid = player.UserId,
         dev = getDeviceInfo(),
     })
@@ -1383,24 +1383,25 @@ local function fetchCreatorScript(creatorKey, password)
     })
     if not res then return false, "Connection Error" end
     if res.StatusCode ~= 200 then
-        -- deliberately generic: don't reveal which factor failed
         if res.StatusCode == 429 then return false, "Too many attempts. Try later." end
-        return false, "Access denied"
+        -- only a real 403 means "not a creator"; 5xx etc. are transient and must not wipe saved login
+        if res.StatusCode == 403 then return false, "Access denied" end
+        return false, "Server error (" .. tostring(res.StatusCode) .. "). Try again."
     end
-    if type(res.Body) ~= "string" or res.Body == "" then return false, "Access denied" end
+    if type(res.Body) ~= "string" or res.Body == "" then return false, "Empty response. Try again." end
     return true, res.Body
 end
 
--- Saved creator login. After one successful creator login the key + password are
+-- Saved creator login. After one successful creator login the key + UserId are
 -- stored in the executor workspace (same place as the license key) so the next run
--- signs in automatically. The worker still verifies all three factors every time.
+-- signs in automatically. The worker still verifies key + UserId every time.
 -- Delete ExoticaCreator.txt to forget it.
 local creatorFileName = "ExoticaCreator.txt"
 
-local function saveCreator(k, p)
+local function saveCreator(k)
     pcall(function()
         if writefile then
-            writefile(creatorFileName, HttpService:JSONEncode({key = k, pass = p}))
+            writefile(creatorFileName, HttpService:JSONEncode({key = k, uid = player.UserId}))
         end
     end)
 end
@@ -1412,8 +1413,8 @@ local function loadCreator()
         end
     end)
     if ok and type(data) == "table" and type(data.key) == "string" and data.key ~= ""
-        and type(data.pass) == "string" and data.pass ~= "" then
-        return data.key, data.pass
+        and data.uid == player.UserId then
+        return data.key
     end
     return nil
 end
@@ -1782,7 +1783,7 @@ local function showLoginUI(autoCreds)
     end)
 
     ----------------------------------------------------------------
-    -- creator login toggle (swaps the paid-script notice for a password box)
+    -- creator login toggle (swaps the paid-script notice for the creator user field)
     ----------------------------------------------------------------
     local masterMode = false
 
@@ -1817,8 +1818,10 @@ local function showLoginUI(autoCreds)
     passBox.BorderSizePixel = 0
     passBox.Font = Enum.Font.Gotham
     passBox.TextSize = 14
-    passBox.Text = ""
-    passBox.PlaceholderText = "Creator password"
+    local creatorUserLabel = player.Name .. " (" .. tostring(player.UserId) .. ")"
+    passBox.Text = creatorUserLabel
+    passBox.TextEditable = false
+    passBox.PlaceholderText = "Creator user"
     passBox.PlaceholderColor3 = Color3.fromRGB(190, 195, 210)
     passBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     passBox.ClearTextOnFocus = false
@@ -1834,7 +1837,7 @@ local function showLoginUI(autoCreds)
         submitBtn.Text = masterMode and "Creator Login" or "Verify Key"
         creatorToggle.Text = masterMode and "Back" or "Creator login"
         textBox.Text = ""
-        passBox.Text = ""
+        passBox.Text = creatorUserLabel
         status.Text = ""
     end
     creatorToggle.Activated:Connect(function()
@@ -2036,12 +2039,6 @@ local function showLoginUI(autoCreds)
             return
         end
 
-        if masterMode and passBox.Text == "" then
-            playEmbedded("warn")
-            setStatus("Please enter the creator password.", Color3.fromRGB(255, 120, 120))
-            return
-        end
-
         busy = true
         playEmbedded("enter", 0.7)
         submitBtn.Text = "Verifying..."
@@ -2049,11 +2046,9 @@ local function showLoginUI(autoCreds)
         tween(submitBtn, {BackgroundTransparency = 0.35}, 0.2)
 
         local success, msg, creatorSrc
-        local enteredPass = passBox.Text
         if masterMode then
-            success, creatorSrc = fetchCreatorScript(enteredKey, enteredPass)
+            success, creatorSrc = fetchCreatorScript(enteredKey)
             msg = creatorSrc
-            passBox.Text = ""
         else
             success, msg = validateKey(enteredKey)
         end
@@ -2064,7 +2059,7 @@ local function showLoginUI(autoCreds)
             tween(submitBtn, {BackgroundColor3 = Color3.fromRGB(48, 209, 88), BackgroundTransparency = 0.05}, 0.3)
             btnGrad.Enabled = false
             if masterMode then
-                saveCreator(enteredKey, enteredPass)
+                saveCreator(enteredKey)
                 task.wait(0.5)
                 creatorSplash()
             else
@@ -2105,7 +2100,6 @@ local function showLoginUI(autoCreds)
     if autoCreds then
         setMasterMode(true)
         textBox.Text = autoCreds.key
-        passBox.Text = autoCreds.pass
         autoRun = true
         task.delay(0.8, submit)
     end
@@ -2115,9 +2109,9 @@ end
 -- STARTUP
 ----------------------------------------------------------------
 task.spawn(function()
-    local cKey, cPass = loadCreator()
+    local cKey = loadCreator()
     if cKey then
-        pcall(showLoginUI, {key = cKey, pass = cPass})
+        pcall(showLoginUI, {key = cKey})
         return
     end
 
