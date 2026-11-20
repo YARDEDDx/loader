@@ -1284,7 +1284,10 @@ end
 local function getHWID()
     local uid = player and player.UserId
     if type(uid) == "number" and uid > 0 then
-        return "rbx_" .. tostring(uid)
+        -- KeyAuth rejects hwid strings shorter than 20 chars, so zero-pad the UserId to a
+        -- fixed width. Still deterministic per account: rbx_000003278425810_ex (22 chars).
+        local digits = string.format("%.0f", uid)
+        return "rbx_" .. string.rep("0", math.max(0, 15 - #digits)) .. digits .. "_ex"
     end
     -- UserId unavailable (e.g. Studio test session): fall back to the device ID
     local ok, id = pcall(function()
