@@ -1960,6 +1960,9 @@ local function showLoginUI(autoCreds)
             if c:IsA("GuiObject") and c ~= sheenFrame then c.Visible = false end
         end
 
+        local GREEN = Color3.fromRGB(48, 209, 88)
+        local DURATION = 3 -- same speed for every login path
+
         local splash = Instance.new("Frame")
         splash.Name = "CreatorSplash"
         splash.Size = UDim2.new(1, 0, 1, 0)
@@ -1967,82 +1970,161 @@ local function showLoginUI(autoCreds)
         splash.BorderSizePixel = 0
         splash.Parent = main
 
-        local title = label(splash, {
-            Size = UDim2.new(1, -40, 0, 30),
-            Position = UDim2.new(0, 20, 0, 104),
-            Font = Enum.Font.GothamBold,
-            Text = cfg.title,
-            TextSize = 24,
-            TextTransparency = 1,
-        })
-        local sub = label(splash, {
-            Size = UDim2.new(1, -40, 0, 18),
+        -- everything that fades in/out together: {instance, property, visibleValue}
+        local items = {}
+        local function track(inst, prop, visible)
+            inst[prop] = 1
+            table.insert(items, {inst, prop, visible})
+            return inst
+        end
+
+        -- pulsing glow behind the badge
+        local glow = Instance.new("Frame")
+        glow.AnchorPoint = Vector2.new(0.5, 0.5)
+        glow.Size = UDim2.new(0, 104, 0, 104)
+        glow.Position = UDim2.new(0.5, 0, 0, 84)
+        glow.BackgroundColor3 = GREEN
+        glow.BackgroundTransparency = 1
+        glow.BorderSizePixel = 0
+        glow.Parent = splash
+        corner(glow, 52)
+
+        -- status badge with a drawn checkmark
+        local badge = Instance.new("Frame")
+        badge.AnchorPoint = Vector2.new(0.5, 0.5)
+        badge.Size = UDim2.new(0, 72, 0, 72)
+        badge.Position = UDim2.new(0.5, 0, 0, 84)
+        badge.BackgroundColor3 = GREEN
+        badge.BorderSizePixel = 0
+        badge.Parent = splash
+        corner(badge, 36)
+        track(badge, "BackgroundTransparency", 0.05)
+        local badgeGrad = Instance.new("UIGradient")
+        badgeGrad.Rotation = 90
+        badgeGrad.Color = ColorSequence.new(Color3.fromRGB(88, 226, 124), Color3.fromRGB(32, 180, 72))
+        badgeGrad.Parent = badge
+        local badgeStroke = stroke(badge, Color3.fromRGB(255, 255, 255), 1, 1.5)
+        track(badgeStroke, "Transparency", 0.55)
+        local badgeScale = Instance.new("UIScale")
+        badgeScale.Scale = 0.4
+        badgeScale.Parent = badge
+
+        local function arm(w, h, x, y, rot)
+            local f = Instance.new("Frame")
+            f.AnchorPoint = Vector2.new(0.5, 0.5)
+            f.Size = UDim2.new(0, w, 0, h)
+            f.Position = UDim2.new(0, x, 0, y)
+            f.Rotation = rot
+            f.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            f.BorderSizePixel = 0
+            f.Parent = badge
+            corner(f, 3)
+            track(f, "BackgroundTransparency", 0)
+        end
+        arm(15, 6, 28, 40, 45)   -- short arm
+        arm(32, 6, 42, 35, -50)  -- long arm
+
+        local title = track(label(splash, {
+            Size = UDim2.new(1, -40, 0, 28),
             Position = UDim2.new(0, 20, 0, 138),
             Font = Enum.Font.GothamBold,
+            Text = cfg.title,
+            TextSize = 22,
+        }), "TextTransparency", 0)
+
+        -- status pill ("Key accepted" / "Key recognized" / "User recognized")
+        local pill = Instance.new("Frame")
+        pill.AnchorPoint = Vector2.new(0.5, 0)
+        pill.Size = UDim2.new(0, 156, 0, 26)
+        pill.Position = UDim2.new(0.5, 0, 0, 172)
+        pill.BackgroundColor3 = GREEN
+        pill.BorderSizePixel = 0
+        pill.Parent = splash
+        corner(pill, 13)
+        track(pill, "BackgroundTransparency", 0.8)
+        track(stroke(pill, GREEN, 1, 1), "Transparency", 0.55)
+        track(label(pill, {
+            Size = UDim2.new(1, 0, 1, 0),
+            Font = Enum.Font.GothamBold,
             Text = cfg.sub,
-            TextSize = 13,
-            TextColor3 = Color3.fromRGB(110, 230, 150),
-            TextTransparency = 1,
-        })
-        local who = label(splash, {
+            TextSize = 12,
+            TextColor3 = Color3.fromRGB(120, 235, 160),
+        }), "TextTransparency", 0)
+
+        track(label(splash, {
             Size = UDim2.new(1, -40, 0, 16),
-            Position = UDim2.new(0, 20, 0, 158),
+            Position = UDim2.new(0, 20, 0, 206),
             Text = "@" .. tostring(player.Name),
             TextSize = 12,
             TextColor3 = Color3.fromRGB(200, 205, 220),
-            TextTransparency = 1,
-        })
+        }), "TextTransparency", 0.15)
 
+        -- progress bar
         local trackBar = Instance.new("Frame")
-        trackBar.Size = UDim2.new(1, -80, 0, 6)
-        trackBar.Position = UDim2.new(0, 40, 0, 204)
+        trackBar.Size = UDim2.new(1, -64, 0, 8)
+        trackBar.Position = UDim2.new(0, 32, 0, 254)
         trackBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        trackBar.BackgroundTransparency = 1
         trackBar.BorderSizePixel = 0
+        trackBar.ClipsDescendants = true
         trackBar.Parent = splash
-        corner(trackBar, 3)
+        corner(trackBar, 4)
+        track(trackBar, "BackgroundTransparency", 0.86)
 
         local fill = Instance.new("Frame")
         fill.Size = UDim2.new(0, 0, 1, 0)
         fill.BackgroundColor3 = Color3.fromRGB(10, 132, 255)
-        fill.BackgroundTransparency = 1
         fill.BorderSizePixel = 0
         fill.Parent = trackBar
-        corner(fill, 3)
+        corner(fill, 4)
+        track(fill, "BackgroundTransparency", 0.05)
         local fillGrad = Instance.new("UIGradient")
         fillGrad.Rotation = 90
         fillGrad.Color = ColorSequence.new(Color3.fromRGB(70, 165, 255), Color3.fromRGB(10, 110, 235))
         fillGrad.Parent = fill
 
-        local stage = label(splash, {
-            Size = UDim2.new(1, -40, 0, 16),
-            Position = UDim2.new(0, 20, 0, 222),
+        local stage = track(label(splash, {
+            Size = UDim2.new(0.6, -32, 0, 16),
+            Position = UDim2.new(0, 32, 0, 270),
             Text = cfg.stages[1],
             TextSize = 12,
             TextColor3 = Color3.fromRGB(200, 205, 220),
-            TextTransparency = 1,
-        })
+            TextXAlignment = Enum.TextXAlignment.Left,
+        }), "TextTransparency", 0.15)
+        local pct = track(label(splash, {
+            Size = UDim2.new(0.4, -32, 0, 16),
+            Position = UDim2.new(0.6, 0, 0, 270),
+            Text = "0%",
+            Font = Enum.Font.GothamBold,
+            TextSize = 12,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextXAlignment = Enum.TextXAlignment.Right,
+        }), "TextTransparency", 0.1)
 
-        tween(title, {TextTransparency = 0}, 0.4)
-        tween(sub, {TextTransparency = 0.05}, 0.4)
-        tween(who, {TextTransparency = 0.15}, 0.4)
-        tween(trackBar, {BackgroundTransparency = 0.85}, 0.4)
-        tween(fill, {BackgroundTransparency = 0.05}, 0.4)
-        tween(stage, {TextTransparency = 0.15}, 0.4)
-        tween(fill, {Size = UDim2.new(1, 0, 1, 0)}, 3, Enum.EasingStyle.Linear)
+        -- fade in + badge pop
+        for _, it in ipairs(items) do tween(it[1], {[it[2]] = it[3]}, 0.4) end
+        tween(badgeScale, {Scale = 1}, 0.55, Enum.EasingStyle.Back)
+        tween(fill, {Size = UDim2.new(1, 0, 1, 0)}, DURATION, Enum.EasingStyle.Linear)
 
-        task.wait(1)
-        stage.Text = cfg.stages[2]
-        task.wait(1)
-        stage.Text = cfg.stages[3]
-        task.wait(1)
+        -- gentle glow pulse
+        glow.BackgroundTransparency = 0.82
+        local pulse = TweenService:Create(glow,
+            TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+            {Size = UDim2.new(0, 132, 0, 132), BackgroundTransparency = 0.94})
+        pulse:Play()
 
-        tween(title, {TextTransparency = 1}, 0.3)
-        tween(sub, {TextTransparency = 1}, 0.3)
-        tween(who, {TextTransparency = 1}, 0.3)
-        tween(trackBar, {BackgroundTransparency = 1}, 0.3)
-        tween(fill, {BackgroundTransparency = 1}, 0.3)
-        tween(stage, {TextTransparency = 1}, 0.3)
+        -- percent + stage text (same total time as before: 3s)
+        local t0 = os.clock()
+        while true do
+            local a = math.clamp((os.clock() - t0) / DURATION, 0, 1)
+            pct.Text = math.floor(a * 100) .. "%"
+            stage.Text = a >= 2/3 and cfg.stages[3] or (a >= 1/3 and cfg.stages[2] or cfg.stages[1])
+            if a >= 1 then break end
+            task.wait(0.03)
+        end
+
+        pulse:Cancel()
+        tween(glow, {BackgroundTransparency = 1}, 0.3)
+        for _, it in ipairs(items) do tween(it[1], {[it[2]] = 1}, 0.3) end
         task.wait(0.3)
         splash:Destroy()
     end
