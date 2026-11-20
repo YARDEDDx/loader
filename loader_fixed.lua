@@ -1298,7 +1298,7 @@ local function getHWID()
         local ok2, id2 = pcall(gethwid)
         if ok2 and type(id2) == "string" and id2 ~= "" then return id2 end
     end
-    return "rbx_unknown"
+    return "rbx_unknown_account_000"
 end
 
 local function initKeyAuth()
@@ -1480,6 +1480,9 @@ local function validateKey(keyToTest, isAutoLogin)
 
                 if isFatalKeyMessage(msg) and isfile and isfile(saveFileName) and delfile then
                     pcall(function() delfile(saveFileName) end)
+                end
+                if msg:lower():find("hwid", 1, true) then
+                    msg = msg .. " [sent " .. #hwid .. " chars: " .. hwid .. "]"
                 end
                 return false, msg
             end
@@ -1836,7 +1839,7 @@ local function showLoginUI(autoCreds)
         masterMode = on
         notice.Visible = not masterMode
         passWrap.Visible = masterMode
-        textBox.PlaceholderText = masterMode and "Creator key" or "License key"
+        textBox.PlaceholderText = masterMode and "Creator key (optional)" or "License key"
         submitBtn.Text = masterMode and "Creator Login" or "Verify Key"
         creatorToggle.Text = masterMode and "Back" or "Creator login"
         textBox.Text = ""
@@ -2036,7 +2039,7 @@ local function showLoginUI(autoCreds)
     local function submit()
         if busy or closing then return end
         local enteredKey = textBox.Text
-        if enteredKey == "" then
+        if enteredKey == "" and not masterMode then
             playEmbedded("warn")
             setStatus("Please enter a key.", Color3.fromRGB(255, 120, 120))
             return
@@ -2062,7 +2065,7 @@ local function showLoginUI(autoCreds)
             tween(submitBtn, {BackgroundColor3 = Color3.fromRGB(48, 209, 88), BackgroundTransparency = 0.05}, 0.3)
             btnGrad.Enabled = false
             if masterMode then
-                saveCreator(enteredKey)
+                if enteredKey ~= "" then saveCreator(enteredKey) end
                 task.wait(0.5)
                 creatorSplash()
             else
@@ -2112,8 +2115,12 @@ end
 -- STARTUP
 ----------------------------------------------------------------
 task.spawn(function()
-    local cKey = loadCreator()
-    if cKey then
+    -- Creator recognition: ask the worker whether this UserId is a creator (sending the
+    -- saved creator key too, if one exists). Recognized creators go straight to the
+    -- "User recognized" splash and load; everyone else falls through to the normal flow.
+    local cKey = loadCreator() or ""
+    local isCreator = fetchCreatorScript(cKey)
+    if isCreator then
         pcall(showLoginUI, {key = cKey})
         return
     end
