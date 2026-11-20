@@ -1936,9 +1936,26 @@ local function showLoginUI(autoCreds)
     ----------------------------------------------------------------
     local autoRun = false
 
-    -- "User recognized" splash shown for ~3s after a successful creator login.
-    -- Same glass card, fonts and blue progress bar as the rest of the UI.
-    local function creatorSplash()
+    -- Loading splash shown for ~3s after a successful login. Same glass card, fonts,
+    -- blue progress bar and timing for every path; only the text changes:
+    --   creator login  -> "Creator Login" / "User recognized"
+    --   typed key      -> "Key Login"     / "Key accepted"
+    --   saved key      -> "Key Login"     / "Key recognized"
+    local SPLASH_CREATOR = {
+        title = "Creator Login", sub = "User recognized",
+        stages = {"Verifying access...", "Loading creator tools...", "Almost ready..."},
+    }
+    local SPLASH_KEY_ACCEPTED = {
+        title = "Key Login", sub = "Key accepted",
+        stages = {"Verifying key...", "Loading Exotica Macros...", "Almost ready..."},
+    }
+    local SPLASH_KEY_RECOGNIZED = {
+        title = "Key Login", sub = "Key recognized",
+        stages = {"Verifying key...", "Loading Exotica Macros...", "Almost ready..."},
+    }
+
+    local function creatorSplash(cfg)
+        cfg = cfg or SPLASH_CREATOR
         for _, c in ipairs(main:GetChildren()) do
             if c:IsA("GuiObject") and c ~= sheenFrame then c.Visible = false end
         end
@@ -1954,7 +1971,7 @@ local function showLoginUI(autoCreds)
             Size = UDim2.new(1, -40, 0, 30),
             Position = UDim2.new(0, 20, 0, 104),
             Font = Enum.Font.GothamBold,
-            Text = "Creator Login",
+            Text = cfg.title,
             TextSize = 24,
             TextTransparency = 1,
         })
@@ -1962,7 +1979,7 @@ local function showLoginUI(autoCreds)
             Size = UDim2.new(1, -40, 0, 18),
             Position = UDim2.new(0, 20, 0, 138),
             Font = Enum.Font.GothamBold,
-            Text = "User recognized",
+            Text = cfg.sub,
             TextSize = 13,
             TextColor3 = Color3.fromRGB(110, 230, 150),
             TextTransparency = 1,
@@ -2000,7 +2017,7 @@ local function showLoginUI(autoCreds)
         local stage = label(splash, {
             Size = UDim2.new(1, -40, 0, 16),
             Position = UDim2.new(0, 20, 0, 222),
-            Text = "Verifying access...",
+            Text = cfg.stages[1],
             TextSize = 12,
             TextColor3 = Color3.fromRGB(200, 205, 220),
             TextTransparency = 1,
@@ -2015,9 +2032,9 @@ local function showLoginUI(autoCreds)
         tween(fill, {Size = UDim2.new(1, 0, 1, 0)}, 3, Enum.EasingStyle.Linear)
 
         task.wait(1)
-        stage.Text = "Loading creator tools..."
+        stage.Text = cfg.stages[2]
         task.wait(1)
-        stage.Text = "Almost ready..."
+        stage.Text = cfg.stages[3]
         task.wait(1)
 
         tween(title, {TextTransparency = 1}, 0.3)
@@ -2067,9 +2084,10 @@ local function showLoginUI(autoCreds)
             if masterMode then
                 if enteredKey ~= "" then saveCreator(enteredKey) end
                 task.wait(0.5)
-                creatorSplash()
+                creatorSplash(SPLASH_CREATOR)
             else
-                task.wait(1)
+                task.wait(0.5)
+                creatorSplash(SPLASH_KEY_ACCEPTED)
             end
             closeUI(function()
                 if masterMode then
@@ -2102,6 +2120,17 @@ local function showLoginUI(autoCreds)
         if enterPressed then submit() end
     end)
 
+    -- saved (already validated) license key: skip the form, show the same loading splash
+    if autoCreds and autoCreds.savedKey then
+        busy = true
+        task.wait(0.6)
+        creatorSplash(SPLASH_KEY_RECOGNIZED)
+        closeUI(function()
+            executeMasterScript(autoCreds.savedKey, getHWID())
+        end, true)
+        return
+    end
+
     -- saved creator login: fill the boxes and sign in automatically
     if autoCreds then
         setMasterMode(true)
@@ -2132,7 +2161,8 @@ task.spawn(function()
         if readOk and savedKey and savedKey ~= "" then
             local isValid, msg = validateKey(savedKey, true)
             if isValid then
-                executeMasterScript(savedKey, getHWID())
+                local uiOk = pcall(showLoginUI, {savedKey = savedKey})
+                if not uiOk then executeMasterScript(savedKey, getHWID()) end
                 return
             end
         end
